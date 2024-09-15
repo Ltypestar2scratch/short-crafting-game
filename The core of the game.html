@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Element Cloning and Dragging</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      overflow: hidden;
+      position: relative;
+    }
+    #sidebar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 150px;
+      background-color: #f0f0f0;
+      padding: 10px;
+      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.3);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow-y: auto;
+    }
+    .element {
+      padding: 10px;
+      margin: 5px 0;
+      font-size: 2rem;
+      cursor: pointer;
+      display: inline-block;
+      width: 100%;
+      text-align: center;
+      background-color: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .cloned {
+      position: absolute;
+      cursor: move;
+      padding: 10px;
+      margin: 0;
+      font-size: 2rem;
+      z-index: 1000;
+    }
+    #sound-button {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 10px;
+      background-color: #f0f0f0;
+      border: 1px solid #ccc;
+      cursor: pointer;
+    }
+    #counter {
+      position: absolute;
+      top: 10px;
+      left: calc(50% - 75px);
+      width: 150px;
+      text-align: center;
+      font-size: 1.5rem;
+      background-color: #fff;
+      border: 1px solid #ddd;
+      padding: 5px;
+      border-radius: 4px;
+      box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+    }
+    #discovery-counter {
+      position: absolute;
+      bottom: 10px;
+      left: calc(50% - 150px);
+      width: 300px;
+      text-align: center;
+      font-size: 1.5rem;
+      background-color: #fff;
+      border: 1px solid #ddd;
+      padding: 5px;
+      border-radius: 4px;
+      box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+    }
+    #win-message {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      font-size: 2rem;
+      background-color: #fff;
+      border: 1px solid #ddd;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5);
+    }
+    #win-message small {
+      display: block;
+      margin-top: 10px;
+      font-size: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div class="element" data-type="Earth" data-label="Earth">🌍 Earth</div>
+  <div class="element" data-type="Wind" data-label="Wind">💨 Wind</div>
+  <div class="element" data-type="Fire" data-label="Fire">🔥 Fire</div>
+  <div class="element" data-type="Water" data-label="Water">💧 Water</div>
+</div>
+
+<audio id="combination-sound" src="https://www.myinstants.com/media/sounds/infinite-craft-combination-sound.mp3"></audio>
+<audio id="background-music" src="https://audio.jukehost.co.uk/wl0e25Z3hlm71SRocr2JRVTYWxsnRLuA" loop></audio>
+
+<button id="sound-button">Turn Sound On</button>
+<div id="counter">Total Elements: 4</div>
+<div id="discovery-counter">How many elements you discovered: 4</div>
+
+<div id="win-message">
+  <p>You won! 🤑🤑🤑</p>
+  <small>Thanks for playing this short game 😊😊😊</small>
+</div>
+
+<script>
+  let currentDraggedElement = null;
+  let elementsToCheck = [];
+  let soundEnabled = false; // Track sound state
+
+  // Updated lookup table with new combinations
+  const lookupTable = {
+    'Wind+Earth': { emoji: '🌍', name: 'Atmosphere' },
+    'Water+Water': { emoji: '🌊', name: 'Lake' },
+    'Atmosphere+Earth': { emoji: '🌫', name: 'Troposphere' },
+    'Earth+Earth': { emoji: '🏝️', name: 'Land' },
+    'Earth+Water': { emoji: '🌱', name: 'Plant' },
+    'Plant+Water': { emoji: '🌳', name: 'Tree' },
+    'Wind+Tree': { emoji: '👃', name: 'Oxygen' },
+    'Oxygen+Oxygen': { emoji: '🌐', name: 'Ozone' },
+    'Ozone+Atmosphere': { emoji: '🛡', name: 'Protection' },
+    'Land+Land': { emoji: '🗾', name: 'Continent' },
+    'Continent+Continent': { emoji: '🪐', name: 'Planet' },
+    'Planet+Planet': { emoji: '☀', name: 'Star' },
+    'Fire+Fire': { emoji: '🌋', name: 'Volcano' },
+    'Volcano+Wind': { emoji: '🌋', name: 'Eruption' },
+    'Eruption+Atmosphere': { emoji: '⚡', name: 'Energy' },
+    'Star+Energy': { emoji: '⚡', name: 'Solar panel' },
+    'Star+Water': { emoji: '🧬', name: 'Life' },
+    'Life+Land': { emoji: '🐈', name: 'Animal' },
+    'Animal+Fire': { emoji: '🧑', name: 'Human' },
+    'Human+Energy': { emoji: '😮', name: 'Stimuli' },
+    'Fire+Water': { emoji: '♨️', name: 'Steam' },
+    'Steam+Human': { emoji: '😒', name: 'Frustration' },
+    'Frustration+Protection': { emoji: '😡', name: 'Jealous' },
+    'Wind+Wind': { emoji: '🚶', name: 'Unpredictable movement' },
+    'Unpredictable movement+Jealous': { emoji: '⚔', name: 'Attack' },
+    'Ozone+Ozone': { emoji: '4️⃣', name: 'Tetraoxygen' },
+    'Solar panel+Star': { emoji: '⚡', name: 'Electricity' },
+    'Electricity+Energy': { emoji: '🔄', name: 'Alternative' },
+    'Tree+Human': { emoji: '🪓', name: 'Lumberjack' },
+    'Lumberjack+Tree': { emoji: '🪓', name: 'Wood' },
+    'Steam+Wood': { emoji: '🏭', name: 'Factory' },
+    'Factory+Wood': { emoji: '📄', name: 'Paper' },
+    'Paper+Paper': { emoji: '📕', name: 'Book' },
+    'Eruption+Human': { emoji: '🧠', name: 'Knowledge' },
+    'Book+Book': { emoji: '📚', name: 'Subject' },
+    'Human+Human': { emoji: '🗣', name: 'Talk' },
+    'Subject+Talk': { emoji: '🌎', name: 'English' },
+    'English+Alternative': { emoji: '🔄', name: 'Synonym' },
+    'Talk+Human': { emoji: '💬', name: 'Message' },
+    'Message+Island': { emoji: '🏃', name: 'Escape' },
+    'Message+Fire': { emoji: '🌐', name: 'Grammatically correct' },
+    'Message+Water': { emoji: '❌', name: 'Grammatically incorrect' },
+    'Electricity+Book': { emoji: '💻', name: 'Computer information' },
+    'Computer information+Talk': { emoji: '🗣', name: 'NPC' },
+    'Computer information+Message': { emoji: '🌐', name: 'Internet' },
+    'Stimuli+Fire': { emoji: '😄', name: 'Happy' },
+    'Fire+Lake': { emoji: '💥', name: 'Outmatched' },
+    'Human+Plant': { emoji: '👶', name: 'Child' },
+    'Child+Message': { emoji: '🥴', name: 'Slang' },
+    'Slang+Slang': { emoji: '🤣', name: 'Meme' },
+    'Meme+Outmatched': { emoji: '🔫', name: 'Bringing a knife to a gun fight' }
+  };
+
+  // Function to update the counters
+  function updateCounters() {
+    const numStartingElements = 4; // Initial number of elements
+    const numLookupElements = Object.keys(lookupTable).length;
+    const totalElements = numStartingElements + numLookupElements;
+    const discoveredElements = document.querySelectorAll('#sidebar .element').length;
+
+    // Update top counter
+    document.getElementById('counter').textContent = `Total Elements: ${totalElements}`;
+
+    // Update bottom counter
+    const discoveryCounter = document.getElementById('discovery-counter');
+    if (discoveredElements >= totalElements / 2) {
+      discoveryCounter.textContent = `How many elements are left to discover out there: ${totalElements - discoveredElements}`;
+    } else {
+      discoveryCounter.textContent = `How many elements you discovered: ${discoveredElements}`;
+    }
+
+    // Show win message if all elements are discovered
+    if (discoveredElements === totalElements) {
+      document.getElementById('win-message').style.display = 'block';
+    }
+  }
+
+  // Call updateCounters initially
+  updateCounters();
+
+  // Add event listener to all element divs
+  document.querySelectorAll('.element').forEach(element => {
+    element.addEventListener('click', function() {
+      cloneElement(element);
+    });
+  });
+
+  // Handle sound button click
+  document.getElementById('sound-button').addEventListener('click', function() {
+    soundEnabled = !soundEnabled;
+    const soundButton = document.getElementById('sound-button');
+    if (soundEnabled) {
+      soundButton.textContent = 'Turn Sound Off';
+      document.getElementById('background-music').play();
+    } else {
+      soundButton.textContent = 'Turn Sound On';
+      document.getElementById('background-music').pause();
+    }
+  });
+
+  // Function to clone elements
+  function cloneElement(originalElement) {
+    const clonedElement = originalElement.cloneNode(true);
+    clonedElement.classList.add('cloned');
+    clonedElement.dataset.label = originalElement.dataset.label;
+    clonedElement.style.width = `${originalElement.offsetWidth}px`;
+    clonedElement.style.height = `${originalElement.offsetHeight}px`;
+    clonedElement.style.position = 'absolute';
+    clonedElement.style.left = '50px'; // Initial position
+    clonedElement.style.top = '50px'; // Initial position
+
+    clonedElement.addEventListener('mousedown', function(event) {
+      currentDraggedElement = clonedElement;
+      clonedElement.style.zIndex = '1001'; // Bring to front when dragging
+      moveElement(event);
+    });
+
+    clonedElement.addEventListener('mouseup', function() {
+      if (currentDraggedElement) {
+        elementsToCheck.push(clonedElement);
+        clonedElement.style.zIndex = '1000'; // Reset z-index after dragging
+      }
+    });
+
+    document.addEventListener('mousemove', moveElement);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    document.body.appendChild(clonedElement);
+    updateCounters(); // Update counter when a new element is added
+  }
+
+  function moveElement(event) {
+    if (currentDraggedElement) {
+      const x = event.clientX - (currentDraggedElement.offsetWidth / 2);
+      const y = event.clientY - (currentDraggedElement.offsetHeight / 2);
+      currentDraggedElement.style.left = x + 'px';
+      currentDraggedElement.style.top = y + 'px';
+    }
+  }
+
+  function handleMouseUp() {
+    if (currentDraggedElement) {
+      const sidebarRect = document.getElementById('sidebar').getBoundingClientRect();
+      const currentDraggedRect = currentDraggedElement.getBoundingClientRect();
+      
+      if (currentDraggedRect.right > sidebarRect.left &&
+          currentDraggedRect.left < sidebarRect.right &&
+          currentDraggedRect.bottom > sidebarRect.top &&
+          currentDraggedRect.top < sidebarRect.bottom) {
+        // If the cloned element is inside the sidebar, delete it
+        document.body.removeChild(currentDraggedElement);
+      } else {
+        // Check for collisions with other cloned elements
+        const clonedElements = document.querySelectorAll('.cloned');
+        clonedElements.forEach(el => {
+          if (el !== currentDraggedElement && isColliding(currentDraggedElement, el)) {
+            const combination = getElementCombination(currentDraggedElement.dataset.label, el.dataset.label);
+            if (combination) {
+              // Play combination sound if enabled
+              if (soundEnabled) {
+                document.getElementById('combination-sound').play();
+              }
+              // Remove the collided elements
+              document.body.removeChild(currentDraggedElement);
+              document.body.removeChild(el);
+
+              // Spawn new element from combination
+              spawnNewElement(combination.emoji, combination.name, currentDraggedElement.style.left, currentDraggedElement.style.top);
+
+              // Add new element to the sidebar
+              addElementToSidebar(combination.emoji, combination.name);
+
+              // Update counter after adding new element
+              updateCounters();
+            }
+          }
+        });
+      }
+      elementsToCheck = [];
+    }
+    currentDraggedElement = null;
+  }
+
+  function getElementCombination(type1, type2) {
+    const combination1 = `${type1}+${type2}`;
+    const combination2 = `${type2}+${type1}`; // Allow reverse combinations
+    return lookupTable[combination1] || lookupTable[combination2] || null;
+  }
+
+  function isColliding(el1, el2) {
+    const rect1 = el1.getBoundingClientRect();
+    const rect2 = el2.getBoundingClientRect();
+
+    return !(rect1.right < rect2.left || 
+             rect1.left > rect2.right || 
+             rect1.bottom < rect2.top || 
+             rect1.top > rect2.bottom);
+  }
+
+  function spawnNewElement(emoji, name, x, y) {
+    const newElement = document.createElement('div');
+    newElement.classList.add('cloned');
+    newElement.dataset.label = name;
+    newElement.innerHTML = `${emoji} ${name}`;
+    
+    newElement.style.width = `${currentDraggedElement.offsetWidth}px`;
+    newElement.style.height = `${currentDraggedElement.offsetHeight}px`;
+    
+    newElement.style.position = 'absolute';
+    newElement.style.left = x; // Use the x and y values passed from the previous element
+    newElement.style.top = y;
+
+    newElement.addEventListener('mousedown', function(event) {
+      currentDraggedElement = newElement;
+      newElement.style.zIndex = '1001'; // Bring to front when dragging
+      moveElement(event);
+    });
+
+    newElement.addEventListener('mouseup', function() {
+      if (currentDraggedElement) {
+        elementsToCheck.push(newElement);
+        newElement.style.zIndex = '1000'; // Reset z-index after dragging
+      }
+    });
+
+    document.addEventListener('mousemove', moveElement);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    document.body.appendChild(newElement);
+    updateCounters(); // Update counter when a new element is spawned
+  }
+
+  function addElementToSidebar(emoji, name) {
+    // Check if the element already exists in the sidebar
+    const existingElement = document.querySelector(`#sidebar .element[data-label="${name}"]`);
+    if (!existingElement) {
+      const newElement = document.createElement('div');
+      newElement.classList.add('element');
+      newElement.dataset.label = name;
+      newElement.dataset.type = name; // Use the name for type
+      newElement.innerHTML = `${emoji} ${name}`;
+
+      newElement.addEventListener('click', function() {
+        cloneElement(newElement);
+      });
+
+      document.getElementById('sidebar').appendChild(newElement);
+      updateCounters(); // Update counter when a new element is added
+    }
+  }
+</script>
+
+</body>
+</html>
