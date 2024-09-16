@@ -1,0 +1,1 @@
+This is a simple element game where you can click a element in a sidebar and drag it out. Can you find all elements without cheating? Go to [this link](https://ltypestar2scratch.github.io/short-crafting-game/) to find out for yourself.
